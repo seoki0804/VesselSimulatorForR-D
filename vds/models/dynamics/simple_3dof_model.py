@@ -1,64 +1,66 @@
 # vds/models/dynamics/simple_3dof_model.py
 
 import numpy as np
-from vds.models.dynamics.base_model import BaseDynamicsModel
+from .base_model import BaseDynamicsModel
 from vds.models.vessels.base_vessel import VesselState
 
 class Simple3DOFModel(BaseDynamicsModel):
     """
-    A simplified 3-DOF (Surge, Sway, Yaw) dynamics model for vessel maneuvering.
-    Heave, Roll, and Pitch are ignored in this model.
+    A simplified 3-DOF (Surge, Sway, Yaw) dynamics model.
+    This model includes a basic implementation of shallow water effects.
     """
-    def __init__(self, vessel_mass: float, inertia_z: float):
+    def __init__(self, vessel_mass: float, inertia_z: float, vessel_draft: float):
+        self.M = np.array([
+            [vessel_mass, 0, 0],
+            [0, vessel_mass, 0],
+            [0, 0, inertia_z]
+        ])
+        self.inv_M = np.linalg.inv(self.M)
+        self.vessel_draft = vessel_draft
+
+    def calculate_accelerations(self, current_state: VesselState, control_input: dict, water_depth: float) -> np.ndarray:
         """
-        Initializes the simplified dynamics model.
-
-        Args:
-            vessel_mass (float): The total mass of the vessel (in kg).
-            inertia_z (float): The moment of inertia around the z-axis (for yaw).
+        Calculates accelerations considering control inputs and shallow water effects.
         """
-        # Mass matrix (M_RB) - simplified for 3-DOF
-        self.M = np.diag([vessel_mass, vessel_mass, vessel_mass, 999, 999, inertia_z])
-        # Placeholder for added mass (will be zero for now)
-        self.M_A = np.zeros((6, 6))
-        self.M_inv = np.linalg.inv(self.M + self.M_A)
+        u, v, r = current_state.nu[0], current_state.nu[1], current_state.nu[5]
+        delta_rad = np.radians(control_input.get('delta_deg', 0.0))
+        n_rpm = control_input.get('n_rpm', 0.0)
 
-        # Damping matrix (linear damping) - rough estimation
-        self.D = np.diag([1e4, 5e4, 5e4, 1e5, 1e5, 1e6])
+        # --- Shallow Water Effect Calculation ---
+        h_over_T = water_depth / self.vessel_draft
+        shallow_water_multiplier = 1.0
+        if h_over_T < 3.0:
+            # Simple model: resistance increases quadratically as h/T approaches 1
+            shallow_water_multiplier = 1.0 + (3.0 - h_over_T)**2
         
-        print("Simple3DOFModel initialized.")
+        # --- Forces and Moments Calculation ---
+        # 1. Propulsion (simplified)
+        thrust = 10 * n_rpm
 
-    def calculate_nu_dot(self, state: VesselState, control_input: dict) -> np.ndarray:
-        """
-        Calculates accelerations based on a simplified force model.
+        # 2. Rudder Force (simplified)
+        rudder_lift = -50000 * u**2 * delta_rad
 
-        Equation: M * nu_dot + D * nu = tau
-        -> nu_dot = M_inv * (tau - D * nu)
-        """
-        nu = state.nu
+        # 3. Damping / Resistance (Hydrodynamic forces)
+        # These are affected by the shallow water multiplier
+        damping_surge = -100 * u * abs(u) * shallow_water_multiplier
+        damping_sway = -1000 * v * abs(v) * shallow_water_multiplier
+        damping_yaw = -1e7 * r * abs(r) * shallow_water_multiplier
+
+        # Total forces vector [X, Y, N]
+        tau = np.array([
+            thrust + damping_surge,
+            rudder_lift + damping_sway,
+            rudder_lift * -75 + damping_yaw # Rudder acts at a lever arm from CG
+        ])
+
+        # Calculate accelerations: nu_dot = M^-1 * tau
+        nu_dot_3dof = self.inv_M @ tau
         
-        # Get control inputs
-        rudder_angle_rad = np.deg2rad(control_input.get('delta_deg', 0.0))
-        propeller_rpm = control_input.get('n_rpm', 0.0)
+        # Return as a 6-DOF array
+        nu_dot_6dof = np.zeros(6)
+        nu_dot_6dof[0] = nu_dot_3dof[0]  # u_dot
+        nu_dot_6dof[1] = nu_dot_3dof[1]  # v_dot
+        nu_dot_6dof[5] = nu_dot_3dof[2]  # r_dot
 
-        # --- Simplified Force Calculation (tau) ---
-        # 1. Propulsion force (Surge)
-        # Proportional to the square of RPM
-        force_x = 10.0 * (propeller_rpm ** 2)
+        return nu_dot_6dof
 
-        # 2. Rudder forces (Sway and Yaw)
-        # Proportional to forward speed (u) squared and rudder angle
-        u_sq = state.nu[0] ** 2
-        force_y = -5e4 * u_sq * rudder_angle_rad
-        torque_z = -1e6 * u_sq * rudder_angle_rad
-
-        tau = np.array([force_x, force_y, 0, 0, 0, torque_z])
-        
-        # --- Damping forces ---
-        damping_forces = self.D @ nu
-        
-        # --- Calculate accelerations ---
-        net_forces = tau - damping_forces
-        nu_dot = self.M_inv @ net_forces
-
-        return nu_dot

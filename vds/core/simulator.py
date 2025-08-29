@@ -1,68 +1,59 @@
 # vds/core/simulator.py
 
+import numpy as np
+from .kinematics import update_kinematics_6dof
 from vds.models.vessels.base_vessel import BaseVessel
 from vds.models.dynamics.base_model import BaseDynamicsModel
-from vds.core.kinematics import update_kinematics_6dof
+from vds.environment.geography import Geography
 
 class Simulator:
     """
-    The main orchestrator for running the vessel dynamics simulation.
-    It manages the simulation time and the update loop.
+    Manages the overall simulation loop, state updates, and interactions
+    between the vessel and its environment.
     """
-
-    def __init__(self, vessel: BaseVessel, dynamics_model: BaseDynamicsModel):
+    def __init__(self, vessel: BaseVessel, dynamics_model: BaseDynamicsModel, geography: Geography = None):
         """
-        Initializes the Simulator.
+        Initializes the simulator.
 
         Args:
-            vessel (BaseVessel): The vessel instance to be simulated.
-            dynamics_model (BaseDynamicsModel): The physics model to calculate the vessel's dynamics.
+            vessel (BaseVessel): The vessel object to be simulated.
+            dynamics_model (BaseDynamicsModel): The physics model for the vessel.
+            geography (Geography, optional): The geographical data. Defaults to None.
         """
         self.vessel = vessel
         self.dynamics_model = dynamics_model
+        self.geography = geography
         self.simulation_time = 0.0
-        print("Simulator initialized.")
 
     def step(self, dt: float, control_input: dict):
         """
-        Advances the simulation by a single time step, dt.
+        Advances the simulation by one time step.
 
         Args:
-            dt (float): The duration of the time step in seconds.
-            control_input (dict): The control inputs for the vessel (e.g., rudder, propeller).
+            dt (float): The time step duration in seconds.
+            control_input (dict): Control inputs for the vessel.
         """
-        # 1. Calculate accelerations using the dynamics model
-        nu_dot = self.dynamics_model.calculate_nu_dot(self.vessel.state, control_input)
+        # 1. Get water depth at current vessel position
+        current_depth = 1000.0 # Default deep water
+        if self.geography:
+            x_north = self.vessel.state.eta[0]
+            y_east = self.vessel.state.eta[1]
+            # Depth values are negative, so we take the absolute value
+            current_depth = abs(self.geography.get_depth_at(x_north, y_east))
 
-        # 2. Integrate accelerations to update velocities (nu)
-        #    (Euler forward integration)
+        # 2. Calculate accelerations using the dynamics model
+        nu_dot = self.dynamics_model.calculate_accelerations(
+            self.vessel.state, 
+            control_input,
+            current_depth 
+        )
+
+        # 3. Integrate velocities (Euler integration)
         self.vessel.state.nu += nu_dot * dt
 
-        # 3. Integrate velocities to update position and orientation (eta)
-        #    This is handled by the kinematics module
+        # 4. Update position and orientation using kinematics
         self.vessel.state = update_kinematics_6dof(self.vessel.state, dt)
-        
-        # 4. Advance simulation time
+
+        # 5. Advance simulation time
         self.simulation_time += dt
-
-    def run(self, duration: float, dt: float = 0.1, initial_control: dict = {'delta': 0.0, 'n': 0.0}):
-        """
-        Runs the simulation for a given duration.
-
-        Args:
-            duration (float): The total time to run the simulation in seconds.
-            dt (float, optional): The time step for each update. Defaults to 0.1.
-            initial_control (dict, optional): The control inputs to be used for the simulation run.
-        """
-        print(f"\nRunning simulation for {duration} seconds...")
-        
-        num_steps = int(duration / dt)
-        for i in range(num_steps):
-            self.step(dt, initial_control)
-            # Print status periodically, e.g., 10 times during the simulation
-            if num_steps > 10 and i % (num_steps // 10) == 0:
-                print(f"Time: {self.simulation_time:.1f}s | {self.vessel.get_state_summary()}")
-        
-        print("Simulation finished.")
-        print(f"Final State -> Time: {self.simulation_time:.1f}s | {self.vessel.get_state_summary()}")
 
