@@ -6,22 +6,22 @@ from vds.models.vessels.base_vessel import VesselState
 
 class BaseDynamicsModel(ABC):
     """
-    Abstract base class for all vessel dynamics (physics) models.
-    Defines the interface for calculating forces and accelerations.
+    Abstract base class for all vessel dynamics models.
+    Defines the interface for calculating forces and moments.
     """
+
     @abstractmethod
-    def calculate_accelerations(self, current_state: VesselState, control_input: dict, water_depth: float) -> np.ndarray:
+    def calculate_forces(self, state: VesselState, control: dict, depth: float) -> np.ndarray:
         """
-        Calculates the accelerations in the body-fixed frame (nu_dot).
+        Calculates the forces and moments acting on the vessel.
 
         Args:
-            current_state (VesselState): The current state of the vessel.
-            control_input (dict): A dictionary containing control inputs like 
-                                  propeller RPM ('n_rpm') and rudder angle ('delta_deg').
-            water_depth (float): The water depth at the vessel's current position in meters.
+            state (VesselState): The current state of the vessel.
+            control (dict): The current control inputs (e.g., rpm, rudder_angle).
+            depth (float): The water depth at the vessel's current position.
 
         Returns:
-            np.ndarray: A 6-element array representing the accelerations [u_dot, v_dot, w_dot, p_dot, q_dot, r_dot].
+            np.ndarray: The resulting accelerations (nu_dot) in the body-fixed frame.
         """
         pass
 

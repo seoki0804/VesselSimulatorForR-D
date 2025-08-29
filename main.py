@@ -1,79 +1,93 @@
 # main.py
 
 import pygame
-import numpy as np
 import sys
-from collections import deque
+import numpy as np
 
+from app.renderer import Renderer
 from vds.core.simulator import Simulator
 from vds.models.vessels.base_vessel import BaseVessel, VesselSpecifications, VesselState
 from vds.models.dynamics.simple_3dof_model import Simple3DOFModel
 from vds.environment.geography import Geography
-from app.renderer import Renderer
 
 def main():
-    """
-    Sets up and runs the main simulation and visualization loop.
-    """
-    # 1. Load Environment Data
+    # --- Simulation Setup ---
+    # 1. Initialize Geography and Environment
     geography = Geography.from_csv('data/bathymetry/sample_depth.csv', cell_size=20)
-    print("Geography data loaded.")
+    
+    # Add some obstacles
+    geography.add_obstacle(center_x=150, center_y=-100, radius=25)
+    geography.add_obstacle(center_x=300, center_y=-250, radius=40)
+    print("Geography and obstacle data loaded.\n")
 
-    # 2. Define Vessel Specifications
+    # 2. Initialize Vessel
     specs = VesselSpecifications(
-        length=30.0, # Smaller vessel to better see map details
-        width=5.0,
-        draft=2.0,
-        displacement=500
+        loa=150.0,
+        beam=25.0,
+        draft=10.0,
+        mass=17000e3,
+        inertia_z=1.77e9
     )
-
-    # 3. Define Initial State (start near the center of the map)
     initial_state = VesselState(
-        eta=np.zeros(6),
-        nu=np.array([2.0, 0, 0, 0, 0, 0]) # ~4 knots
+        nu=np.array([5.0, 0, 0, 0, 0, 0])
     )
-
-    # 4. Create a Vessel Instance
     vessel = BaseVessel(specs, initial_state)
 
-    # 5. Create a Dynamics Model Instance
-    mass = specs.displacement * 1025
-    Iz = 0.5 * mass * (specs.width**2)
-    # --- FIX: Added vessel_draft argument ---
+    # 3. Initialize Dynamics Model
+    mass = specs.mass + 6.0e6
+    Iz = specs.inertia_z + 2.0e9
     dynamics_model = Simple3DOFModel(vessel_mass=mass, inertia_z=Iz, vessel_draft=specs.draft)
 
-    # 6. Create the Simulator
+    # 4. Initialize Simulator
     simulator = Simulator(vessel, dynamics_model, geography)
 
-    # 7. Create the Renderer
-    renderer = Renderer(width=1280, height=720)
+    # --- Pygame Setup ---
+    SCREEN_WIDTH = 1280
+    SCREEN_HEIGHT = 720
+    renderer = Renderer(SCREEN_WIDTH, SCREEN_HEIGHT)
 
-    # 8. Simulation Loop Variables
+    # --- Main Loop ---
     running = True
-    dt = 0.1
     clock = pygame.time.Clock()
-    trail = deque(maxlen=1000) 
+    dt = 0.1
 
-    control = {'n_rpm': 80.0, 'delta_deg': 15.0}
-    
-    print("\nStarting simulation with visualization...")
+    control = {'rpm': 100.0, 'rudder_angle': 0.0}
+    RUDDER_INCREMENT = 1.0
+    RUDDER_MAX = 35.0
+    RPM_INCREMENT = 10.0
+    RPM_MAX = 200.0
+
+    print("Starting simulation... Use Arrow Keys to control the vessel.")
+    print("UP/DOWN: RPM | LEFT/RIGHT: Rudder | '0' KEY: Center Rudder")
 
     while running:
-        running = renderer.handle_events()
-        if not running: break
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT:
+                    control['rudder_angle'] = max(-RUDDER_MAX, control['rudder_angle'] - RUDDER_INCREMENT)
+                elif event.key == pygame.K_RIGHT:
+                    control['rudder_angle'] = min(RUDDER_MAX, control['rudder_angle'] + RUDDER_INCREMENT)
+                elif event.key == pygame.K_UP:
+                    control['rpm'] = min(RPM_MAX, control['rpm'] + RPM_INCREMENT)
+                elif event.key == pygame.K_DOWN:
+                    control['rpm'] = max(0, control['rpm'] - RPM_INCREMENT)
+                elif event.key == pygame.K_0 or event.key == pygame.K_KP0:
+                    control['rudder_angle'] = 0.0
+                    
 
-        simulator.step(dt, control)
-        
-        current_pos = simulator.vessel.state.eta[:2]
-        trail.append(current_pos)
+        if simulator.collision_detected:
+            pass
+        else:
+            simulator.step(dt, control)
 
-        # Pass geography data to the renderer
-        renderer.render(simulator.vessel, list(trail), simulator.simulation_time, geography)
+        # Rendering - UPDATED to pass simulator.time
+        renderer.render(simulator.vessel, geography, control, simulator.time)
 
         clock.tick(60)
 
-    print("Simulation finished.")
-    renderer.quit()
+    pygame.quit()
     sys.exit()
 
 if __name__ == "__main__":

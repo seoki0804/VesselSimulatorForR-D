@@ -1,103 +1,65 @@
 # vds/models/vessels/base_vessel.py
 
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 @dataclass
 class VesselSpecifications:
-    """
-    Holds the static parameters of the vessel.
-    """
-    length: float  # Length of the vessel in meters
-    width: float   # Width of the vessel in meters
+    """Holds the static specifications of a vessel."""
+    loa: float     # Length Overall (LOA) in meters
+    beam: float    # Beam of the vessel in meters
     draft: float   # Draft of the vessel in meters
-    displacement: float  # Displacement in metric tons
+    mass: float    # Total mass in kg
+    inertia_z: float # Moment of inertia about the z-axis (for yaw)
 
 @dataclass
 class VesselState:
-    """
-    Holds the dynamic state of the vessel at a single point in time.
-    Uses 6-DOF (Degrees of Freedom) representation.
+    """Holds the dynamic state of a vessel at a single point in time."""
+    # Position and orientation in earth-fixed frame (NED)
+    # [x, y, z, phi(roll), theta(pitch), psi(yaw)]
+    eta: np.ndarray = field(default_factory=lambda: np.zeros(6))
     
-    eta: Position and orientation in Earth-fixed frame (NED - North-East-Down).
-         [x, y, z, phi, theta, psi]
-         (meters and radians)
-         x: North position
-         y: East position
-         z: Down position (heave)
-         phi: Roll angle
-         theta: Pitch angle
-         psi: Yaw angle (heading)
-
-    nu: Velocities in body-fixed frame.
-        [u, v, w, p, q, r]
-        (m/s and rad/s)
-        u: Surge velocity (longitudinal)
-        v: Sway velocity (transverse)
-        w: Heave velocity (vertical)
-        p: Roll rate
-        q: Pitch rate
-        r: Yaw rate
-    """
-    eta: np.ndarray = np.zeros(6)
-    nu: np.ndarray = np.zeros(6)
+    # Velocities in body-fixed frame
+    # [u(surge), v(sway), w(heave), p(roll), q(pitch), r(yaw)]
+    nu: np.ndarray = field(default_factory=lambda: np.zeros(6))
 
 class BaseVessel:
     """
-    Represents a generic vessel, holding its specifications and current state.
-    This class acts as a data container.
+    Represents a generic vessel, acting as a data container for its
+    specifications and dynamic state.
     """
-    def __init__(self, specs: VesselSpecifications, initial_state: VesselState):
+    def __init__(self, specs: VesselSpecifications, initial_state: VesselState = VesselState()):
         self.specs = specs
         self.state = initial_state
+    
+    @property
+    def sog(self) -> float:
+        """Speed Over Ground in knots."""
+        speed_mps = np.linalg.norm(self.state.nu[0:2]) # Surge and Sway
+        return speed_mps * 1.94384 # m/s to knots
 
-    def get_state_summary(self) -> dict:
-        """
-        Calculates and returns a dictionary of key performance indicators
-        similar to AIS data.
-        """
-        # Velocities in body-frame
-        u, v, _, _, _, r = self.state.nu
-        # Position and orientation in earth-frame
-        x, y, _, _, _, psi = self.state.eta
-
-        # --- SOG (Speed Over Ground) ---
-        # Note: Speed over ground is the magnitude of the velocity vector.
-        # Since the transformation matrix is orthogonal, the vector length is preserved.
-        # Thus, sqrt(u^2 + v^2) in body frame is the same as sqrt(vx_earth^2 + vy_earth^2)
-        sog_mps = np.sqrt(u**2 + v**2)
-        sog_kts = sog_mps * 1.94384  # m/s to knots conversion
-
-        # --- HDG (Heading) ---
-        hdg_deg = (np.degrees(psi)) % 360
-        if hdg_deg < 0: # ensure 0-360 range
-            hdg_deg += 360
-
-        # --- COG (Course Over Ground) ---
-        # This is the actual direction of the vessel's movement over the ground.
-        # We need to transform body-velocities (u,v) to earth-frame velocities.
-        vx_earth = u * np.cos(psi) - v * np.sin(psi)
-        vy_earth = u * np.sin(psi) + v * np.cos(psi)
+    @property
+    def cog(self) -> float:
+        """Course Over Ground in degrees (0-360)."""
+        if self.sog < 0.1:
+            # Return heading if speed is negligible
+            hdg_rad = self.state.eta[5]
+            return np.degrees(hdg_rad) % 360
         
-        # COG is undefined if speed is zero
-        if np.isclose(sog_mps, 0):
-            cog_deg = hdg_deg # If stationary, COG is usually reported as HDG
-        else:
-            cog_rad = np.arctan2(vy_earth, vx_earth)
-            cog_deg = (np.degrees(cog_rad)) % 360
-            if cog_deg < 0:
-                cog_deg += 360
+        # Course includes sway velocity, it's the actual path over ground
+        course_rad_body = np.arctan2(self.state.nu[1], self.state.nu[0])
+        course_rad_earth = self.state.eta[5] + course_rad_body
+        return np.degrees(course_rad_earth) % 360
+        
+    @property
+    def rot(self) -> float:
+        """Rate of Turn in degrees per minute."""
+        yaw_rate_rad_s = self.state.nu[5]
+        return np.degrees(yaw_rate_rad_s) * 60
 
-        # --- ROT (Rate of Turn) ---
-        # Convert yaw rate from rad/s to deg/min
-        rot_deg_min = np.degrees(r) * 60
-
-        return {
-            'pos_x': y, # Easting
-            'pos_y': x, # Northing
-            'sog_kts': sog_kts,
-            'hdg_deg': hdg_deg,
-            'cog_deg': cog_deg,
-            'rot_deg_min': rot_deg_min,
-        }
+    @property
+    def heading(self) -> float:
+        """Heading in degrees (0-360)."""
+        hdg_rad = self.state.eta[5]
+        return np.degrees(hdg_rad) % 360
 
