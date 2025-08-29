@@ -12,15 +12,11 @@ from vds.environment.geography import Geography
 
 def main():
     # --- Simulation Setup ---
-    # 1. Initialize Geography and Environment
     geography = Geography.from_csv('data/bathymetry/sample_depth.csv', cell_size=20)
-    
-    # Add some obstacles
     geography.add_obstacle(center_x=150, center_y=-100, radius=25)
     geography.add_obstacle(center_x=300, center_y=-250, radius=40)
     print("Geography and obstacle data loaded.\n")
 
-    # 2. Initialize Vessel
     specs = VesselSpecifications(
         loa=150.0,
         beam=25.0,
@@ -33,12 +29,10 @@ def main():
     )
     vessel = BaseVessel(specs, initial_state)
 
-    # 3. Initialize Dynamics Model
     mass = specs.mass + 6.0e6
     Iz = specs.inertia_z + 2.0e9
     dynamics_model = Simple3DOFModel(vessel_mass=mass, inertia_z=Iz, vessel_draft=specs.draft)
 
-    # 4. Initialize Simulator
     simulator = Simulator(vessel, dynamics_model, geography)
 
     # --- Pygame Setup ---
@@ -58,7 +52,7 @@ def main():
     RPM_MAX = 200.0
 
     print("Starting simulation... Use Arrow Keys to control the vessel.")
-    print("UP/DOWN: RPM | LEFT/RIGHT: Rudder | '0' KEY: Center Rudder")
+    print("UP/DOWN: RPM | LEFT/RIGHT: Rudder | '0' KEY: Center Rudder | 'R' KEY: Reset")
 
     while running:
         for event in pygame.event.get():
@@ -75,14 +69,15 @@ def main():
                     control['rpm'] = max(0, control['rpm'] - RPM_INCREMENT)
                 elif event.key == pygame.K_0 or event.key == pygame.K_KP0:
                     control['rudder_angle'] = 0.0
-                    
+                elif event.key == pygame.K_r: # ADDED: Reset functionality
+                    simulator.reset()
+                    control = {'rpm': 100.0, 'rudder_angle': 0.0}
 
         if simulator.collision_detected:
             pass
         else:
             simulator.step(dt, control)
 
-        # Rendering - UPDATED to pass simulator.time
         renderer.render(simulator.vessel, geography, control, simulator.time)
 
         clock.tick(60)

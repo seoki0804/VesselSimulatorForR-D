@@ -1,6 +1,7 @@
 # vds/core/simulator.py
 
 import numpy as np
+import copy
 from .kinematics import update_kinematics_6dof
 from vds.models.vessels.base_vessel import BaseVessel
 from vds.models.dynamics.base_model import BaseDynamicsModel
@@ -22,8 +23,17 @@ class Simulator:
         self.vessel = vessel
         self.dynamics_model = dynamics_model
         self.geography = geography
+        # Store the initial state for resetting
+        self.initial_vessel_state = copy.deepcopy(vessel.state)
         self.time = 0.0
         self.collision_detected = False
+
+    def reset(self):
+        """Resets the simulation to its initial state."""
+        self.vessel.state = copy.deepcopy(self.initial_vessel_state)
+        self.time = 0.0
+        self.collision_detected = False
+        print("\n--- Simulation Reset ---")
 
     def step(self, dt: float, control: dict):
         """
@@ -39,14 +49,13 @@ class Simulator:
         # 1. Get current depth at vessel position
         current_depth = self.geography.get_depth_at(self.vessel.state.eta[0], self.vessel.state.eta[1])
 
-        # 2. Calculate accelerations (nu_dot) from the dynamics model
+        # 2. Calculate forces (nu_dot) from the dynamics model
         nu_dot = self.dynamics_model.calculate_forces(self.vessel.state, control, current_depth)
         
         # 3. Integrate velocities (nu) over the time step
         self.vessel.state.nu += nu_dot * dt
         
         # 4. Update vessel state (position and orientation) using kinematics
-        # UPDATED: Now passes the entire state object
         self.vessel.state = update_kinematics_6dof(self.vessel.state, dt)
 
         # 5. Check for collisions with obstructions
