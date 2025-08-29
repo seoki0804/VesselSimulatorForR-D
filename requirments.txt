@@ -1,0 +1,12 @@
+# Core numerical and data handling libraries
+numpy
+scipy
+pandas
+
+# Visualization and UI
+pygame
+matplotlib
+seaborn
+
+# Testing
+pytest
