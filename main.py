@@ -79,6 +79,7 @@ def main():
     hydro_params_path = 'data/vessel_params/kcs_hydrodynamics.json'
     dynamics_model = MMGModel(vessel.specs, hydro_params_path)
     simulator = Simulator(vessel, dynamics_model, geography, ais_targets, wind, current, waves)
+    simulator.show_obstacles = False # Set initial state of obstacles to OFF
 
     # --- Main Simulation Loop ---
     running = True
