@@ -18,9 +18,9 @@ from vds.environment.waves import Waves
 def settings_loop(renderer, clock):
     """Loop for the pre-simulation settings screen."""
     settings = {
-        "wind_speed": "10.0", "wind_dir": "45",
-        "current_speed": "1.0", "current_dir": "180",
-        "waves_h": "0.5", "waves_dir": "90"
+        "wind_speed": "0.0", "wind_dir": "0",
+        "current_speed": "0.0", "current_dir": "0",
+        "waves_h": "0.0", "waves_dir": "0"
     }
     fields = list(settings.keys())
     active_field_index = 0
