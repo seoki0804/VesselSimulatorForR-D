@@ -69,13 +69,14 @@ class Renderer:
         screen_pos = (transformed_pos * self.zoom) + self.offset
         return int(screen_pos[0]), int(screen_pos[1])
 
-    def render(self, vessel: BaseVessel, geography: Geography, control: dict, time: float, ais_targets: list[AISTarget], track_history: deque, show_obstacles: bool, show_water: bool, wind: Wind, current: Current, waves: Waves, is_paused: bool):
+    def render(self, vessel: BaseVessel, geography: Geography, control: dict, time: float, ais_targets: list[AISTarget], track_history: deque, show_obstacles: bool, show_water: bool, wind: Wind, current: Current, waves: Waves, is_paused: bool, waypoints: list):
         self.screen.fill((22, 44, 77))
         
         transformed_vessel_pos = np.array([vessel.state.eta[1], -vessel.state.eta[0]])
         self.offset = np.array([self.width / 2, self.height / 2], dtype=float) - transformed_vessel_pos * self.zoom
 
         self._draw_geography(geography, show_obstacles, show_water, vessel)
+        self._draw_waypoints(waypoints) # Draw waypoints
         self._draw_track(track_history)
         self._draw_ais_targets(ais_targets)
         self._draw_vessel(vessel)
@@ -85,6 +86,19 @@ class Renderer:
             self._draw_pause_overlay()
 
         pygame.display.flip()
+
+    def _draw_waypoints(self, waypoints: list):
+        """Draws the waypoints on the map."""
+        for wp in waypoints:
+            pos = np.array(wp['position'])
+            name = wp['name']
+            
+            screen_pos = self._world_to_screen(pos)
+            
+            pygame.draw.circle(self.screen, (255, 0, 255), screen_pos, 10, 2) # Magenta circle
+            
+            text_surf = self.font.render(name, True, (255, 0, 255))
+            self.screen.blit(text_surf, (screen_pos[0] + 15, screen_pos[1] - 10))
 
     def _draw_pause_overlay(self):
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)

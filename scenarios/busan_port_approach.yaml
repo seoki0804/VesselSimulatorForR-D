@@ -1,0 +1,47 @@
+# Busan Port Approach Scenario
+scenario_name: "Busan Port Approach (VLCC)"
+
+vessel:
+  initial_state:
+    speed_kts: 8.0
+    position: [0, 1000] # Start at the channel entrance (North:0, East:1000)
+  specs:
+    loa: 330.0
+    beam: 60.0
+    draft: 20.8
+    mass: 3.1e8
+    inertia_z: 8.5e11
+    wind_area_longitudinal: 1500.0
+    wind_area_transverse: 6000.0
+  hydro_params: "data/vessel_params/vlcc_hydrodynamics.json"
+
+initial_control:
+  rpm: 50.0
+  rudder_angle: 0.0
+
+environment:
+  geography_data: "data/bathymetry/busan_port_approach.csv"
+  cell_size: 100 # Larger map cells
+
+  # Waypoints for the vessel to follow
+  waypoints:
+    - { name: "WP1", position: [1000, 1000] }
+    - { name: "WP2", position: [2000, 1000] }
+    - { name: "WP3", position: [2500, 600] }
+    - { name: "WP4", position: [3500, 600] }
+
+  obstacles:
+    enabled: true
+    # Fixed locations for buoys marking the channel
+    locations:
+      - { position: [500, 400], radius: 15 }
+      - { position: [500, 1600], radius: 15 }
+      - { position: [1500, 400], radius: 15 }
+      - { position: [1500, 1600], radius: 15 }
+      - { position: [2500, 850], radius: 15 }
+      - { position: [3000, 350], radius: 15 }
+      
+  ais_targets: { enabled: false }
+  wind: { speed_kts: 5.0, direction_deg: 315 } # Light wind from NW
+  current: { speed_kts: 0.5, direction_deg: 180 }
+  waves: { hs_m: 0.5, period_s: 8.0, direction_deg: 0 }

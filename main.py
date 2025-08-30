@@ -89,7 +89,7 @@ def main():
     if scenario_path is None:
         pygame.quit(); sys.exit()
 
-    vessel, dynamics_model, geography, ais_targets, wind, current, waves, initial_control = load_scenario(scenario_path)
+    vessel, dynamics_model, geography, ais_targets, wind, current, waves, initial_control, waypoints = load_scenario(scenario_path)
     
     default_env = {'wind': wind, 'current': current, 'waves': waves}
     env_factors = settings_loop(renderer, clock, default_env)
@@ -99,7 +99,6 @@ def main():
     
     simulator = Simulator(vessel, dynamics_model, geography, ais_targets, wind, current, waves)
     
-    # Check if obstacles were enabled in the scenario file to set initial toggle state
     with open(scenario_path, 'r') as f:
         import yaml
         config = yaml.safe_load(f)
@@ -138,7 +137,8 @@ def main():
             simulator.ais_targets, simulator.track_history,
             simulator.show_obstacles, simulator.show_water_depth,
             simulator.wind, simulator.current, simulator.waves,
-            simulator.is_paused
+            simulator.is_paused,
+            waypoints
         )
         clock.tick(60)
         
