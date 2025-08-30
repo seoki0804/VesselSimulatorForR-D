@@ -18,11 +18,12 @@ class Simulator:
         self.dynamics_model = dynamics_model
         self.geography = geography
         self.ais_targets = ais_targets
-
         self.initial_vessel_state = copy.deepcopy(vessel.state)
         self.time = 0.0
         self.collision_detected = False
         self.track_history = deque(maxlen=10000)
+        self.show_obstacles = True
+        self.show_water_depth = True # State for toggling water depth colors
 
     def reset(self):
         """Resets the simulation to its initial state."""
@@ -38,26 +39,23 @@ class Simulator:
         if self.collision_detected:
             return
 
-        # --- Update Own Ship ---
         current_depth = self.geography.get_depth_at(self.vessel.state.eta[0], self.vessel.state.eta[1])
         nu_dot = self.dynamics_model.calculate_forces(self.vessel.state, control, current_depth)
         self.vessel.state.nu += nu_dot * dt
         self.vessel.state = update_kinematics_6dof(self.vessel.state, dt)
         
-        # --- REVERTED TRACKING LOGIC ---
-        # Add a point to the track history on every step.
         self.track_history.append(self.vessel.state.eta[:2].copy())
-
         self.check_collisions()
         
-        # --- Update AIS Targets ---
         for target in self.ais_targets:
             target.update(self.time)
-
         self.time += dt
 
     def check_collisions(self):
-        """Checks for collisions between the vessel and any obstructions."""
+        """Checks for collisions only if obstacles are toggled on."""
+        if not self.show_obstacles:
+            return
+            
         vessel_pos = self.vessel.state.eta[:2]
         for obs in self.geography.obstructions:
             dist = np.linalg.norm(vessel_pos - obs.position)

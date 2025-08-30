@@ -3,6 +3,7 @@
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass, field
+import random
 
 @dataclass
 class Obstruction:
@@ -15,13 +16,6 @@ class Geography:
     Manages geographical data like bathymetry (water depth) and obstructions.
     """
     def __init__(self, depth_data: np.ndarray, cell_size: float):
-        """
-        Initializes the Geography object.
-
-        Args:
-            depth_data (np.ndarray): A 2D numpy array representing the depth grid.
-            cell_size (float): The size of each grid cell in meters.
-        """
         self.depth_data = depth_data
         self.cell_size = cell_size
         self.grid_height, self.grid_width = depth_data.shape
@@ -31,45 +25,35 @@ class Geography:
 
     @classmethod
     def from_csv(cls, file_path: str, cell_size: float):
-        """
-        Factory method to create a Geography instance from a CSV file.
-
-        Args:
-            file_path (str): The path to the CSV file.
-            cell_size (float): The size of each grid cell in meters.
-
-        Returns:
-            Geography: A new instance of the Geography class.
-        """
-        # Load data using pandas, assuming no header
         data = pd.read_csv(file_path, header=None).values
         print("Geography data loaded.")
         return cls(data, cell_size)
 
     def get_depth_at(self, x: float, y: float) -> float:
-        """
-        Gets the water depth at a specific world coordinate (x, y).
-
-        Args:
-            x (float): The x-coordinate in world space.
-            y (float): The y-coordinate in world space.
-
-        Returns:
-            float: The depth at the given coordinate. Returns a large value if out of bounds.
-        """
-        # Convert world coordinates to grid indices
-        grid_j = int(x / self.cell_size)
-        grid_i = int(y / self.cell_size)
-
-        # Check if the coordinates are within the grid bounds
+        grid_j = int(y / self.cell_size) 
+        grid_i = int(x / self.cell_size) 
         if 0 <= grid_i < self.grid_height and 0 <= grid_j < self.grid_width:
             return self.depth_data[grid_i, grid_j]
         else:
-            return 1000.0  # Deep water if out of map bounds
+            return 1000.0
 
     def add_obstacle(self, center_x: float, center_y: float, radius: float):
-        """Creates and adds a circular obstruction to the geography."""
+        """Creates and adds a circular obstruction at a specific location."""
         position = np.array([center_x, center_y])
-        obstruction = Obstruction(position=position, radius=radius)
-        self.obstructions.append(obstruction)
+        self.obstructions.append(Obstruction(position=position, radius=radius))
+
+    def add_random_obstacles(self, count: int, min_radius: float, max_radius: float, safe_zone_radius: float = 0.0):
+        """Generates and adds random obstacles, avoiding a safe zone around the origin."""
+        for _ in range(count):
+            while True: # Loop until a valid position is found
+                rand_x = random.uniform(0, self.map_height)
+                rand_y = random.uniform(0, self.map_width)
+                position = np.array([rand_x, rand_y])
+                
+                # Check if the obstacle is outside the safe zone
+                if np.linalg.norm(position) > safe_zone_radius:
+                    rand_radius = random.uniform(min_radius, max_radius)
+                    self.obstructions.append(Obstruction(position=position, radius=rand_radius))
+                    break # Exit loop and create the next obstacle
+        print(f"Added {count} random obstacles.")
 
