@@ -13,8 +13,8 @@ class MMGModel(BaseDynamicsModel):
         with open(hydro_params_path, 'r') as f:
             self.p = json.load(f)
         self.spec = vessel_spec
-        self.mass = self.spec.mass
-        self.Iz = self.spec.inertia_z
+        self.mass = float(self.spec.mass) # Ensure mass is a float
+        self.Iz = float(self.spec.inertia_z) # Ensure inertia is a float
         self.L = self.p['Lpp']
         self.d = self.p['d']
         self.rho = self.p['rho']
@@ -26,7 +26,7 @@ class MMGModel(BaseDynamicsModel):
 
         u_c, v_c = 0, 0
         if current:
-            current_speed_ms = current.speed * 0.514444 # Convert knots to m/s
+            current_speed_ms = current.speed * 0.514444
             current_dir_rad = np.radians(current.direction)
             u_c = current_speed_ms * np.cos(current_dir_rad - psi)
             v_c = current_speed_ms * np.sin(current_dir_rad - psi)
@@ -74,7 +74,7 @@ class MMGModel(BaseDynamicsModel):
 
         X_W, Y_W, N_W = 0, 0, 0
         if wind:
-            wind_speed = wind.speed * 0.514444 # knots to m/s
+            wind_speed = wind.speed * 0.514444
             wind_dir_rad = np.radians(wind.direction) + np.pi
             u_w = wind_speed * np.cos(wind_dir_rad - psi) - u_abs
             v_w = wind_speed * np.sin(wind_dir_rad - psi) - v_abs
@@ -91,7 +91,6 @@ class MMGModel(BaseDynamicsModel):
         if waves:
             wave_dir_rad = np.radians(waves.direction) + np.pi
             relative_wave_angle = (wave_dir_rad - psi + np.pi) % (2*np.pi) - np.pi
-            # **FIXED**: More stable and realistic wave drift force model
             C_X_WV = -0.05 * waves.significant_height**2 * (1 - np.cos(relative_wave_angle))
             C_Y_WV = 0.2 * waves.significant_height**2 * np.sin(2 * relative_wave_angle)
             C_N_WV = 0.03 * waves.significant_height**2 * np.sin(relative_wave_angle)

@@ -11,11 +11,9 @@ class VesselSpecifications:
     draft: float
     mass: float
     inertia_z: float
-    # ADDED: Parameters for wind force calculation
-    wind_area_longitudinal: float  # Frontal wind area in m^2
-    wind_area_transverse: float    # Lateral wind area in m^2
+    wind_area_longitudinal: float
+    wind_area_transverse: float
 
-# ... (VesselState and BaseVessel classes remain the same)
 @dataclass
 class VesselState:
     """Holds the dynamic state of a vessel at a single point in time."""

@@ -2,6 +2,7 @@
 numpy
 scipy
 pandas
+PyYAML 
 
 # Visualization and UI
 pygame

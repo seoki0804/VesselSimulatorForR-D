@@ -1,0 +1,46 @@
+# Starboard Turning Circle Test Scenario
+scenario_name: "KCS Starboard Turning Test"
+
+vessel:
+  initial_state:
+    speed_kts: 15.0 # Initial speed in knots
+    
+  # KCS Vessel Specifications
+  specs:
+    loa: 232.5
+    beam: 32.2
+    draft: 10.8
+    mass: 5.2e7
+    inertia_z: 2.17e10
+    wind_area_longitudinal: 800.0
+    wind_area_transverse: 2500.0
+  
+  hydro_params: "data/vessel_params/kcs_hydrodynamics.json"
+
+initial_control:
+  rpm: 85.0
+  rudder_angle: 35.0 # Full starboard rudder
+
+environment:
+  geography_data: "data/bathymetry/sample_depth.csv"
+  cell_size: 20
+  
+  # Obstacles are disabled for this scenario
+  obstacles:
+    enabled: false
+    
+  # AIS targets are disabled for this scenario
+  ais_targets:
+    enabled: false
+    
+  # Default environmental conditions (can be overridden in UI)
+  wind:
+    speed_kts: 0.0
+    direction_deg: 0
+  current:
+    speed_kts: 0.0
+    direction_deg: 0
+  waves:
+    hs_m: 0.0
+    period_s: 8.0
+    direction_deg: 0
