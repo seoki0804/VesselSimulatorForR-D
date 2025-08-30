@@ -4,6 +4,7 @@ import pygame
 import sys
 import os
 import numpy as np
+import yaml
 from app.renderer import Renderer
 from vds.core.simulator import Simulator
 from vds.utils.logger import DataLogger
@@ -98,9 +99,9 @@ def main():
     wind, current, waves = env_factors
     
     simulator = Simulator(vessel, dynamics_model, geography, ais_targets, wind, current, waves)
+    simulator.waypoints = waypoints # Attach waypoints to simulator for access
     
     with open(scenario_path, 'r') as f:
-        import yaml
         config = yaml.safe_load(f)
         simulator.show_obstacles = config.get('environment', {}).get('obstacles', {}).get('enabled', False)
 
@@ -116,7 +117,7 @@ def main():
     panning = False
     pan_start_pos = (0, 0)
 
-    print("Controls: '0': Reset Rudder | 'R': Reset Sim | 'O': Obstacles | 'W': Water | 'P': Pause | 'C': Lock/Unlock Camera")
+    print("Controls: '0': Center Rudder | 'R': Reset Sim | 'O': Obstacles | 'W': Water | 'P': Pause | 'C': Lock/Unlock Camera | 'M': Minimap")
 
     while running:
         for event in pygame.event.get():
@@ -148,6 +149,7 @@ def main():
                 elif event.key == pygame.K_o: simulator.show_obstacles = not simulator.show_obstacles
                 elif event.key == pygame.K_w: simulator.show_water_depth = not simulator.show_water_depth
                 elif event.key == pygame.K_p: simulator.is_paused = not simulator.is_paused
+                elif event.key == pygame.K_m: simulator.show_minimap = not simulator.show_minimap
 
         if panning:
             mouse_delta = np.array(pygame.mouse.get_pos()) - np.array(pan_start_pos)
@@ -160,13 +162,9 @@ def main():
                 logger.log(simulator, control)
             simulator.step(dt, control)
 
-        renderer.render(
-            simulator.vessel, geography, control, simulator.time, 
-            simulator.ais_targets, simulator.track_history,
-            simulator.show_obstacles, simulator.show_water_depth,
-            simulator.wind, simulator.current, simulator.waves,
-            simulator.is_paused, waypoints
-        )
+        # MODIFIED: Simplified render call
+        renderer.render(simulator, control)
+        
         clock.tick(60)
         
     logger.save()

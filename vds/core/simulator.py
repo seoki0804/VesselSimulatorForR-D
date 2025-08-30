@@ -13,9 +13,6 @@ from vds.environment.current import Current
 from vds.environment.waves import Waves
 
 class Simulator:
-    """
-    Manages the overall simulation loop, state updates, and interactions.
-    """
     def __init__(self, vessel: BaseVessel, dynamics_model: BaseDynamicsModel, geography: Geography, ais_targets: list[AISTarget] = [], wind: Wind = None, current: Current = None, waves: Waves = None):
         self.vessel = vessel
         self.dynamics_model = dynamics_model
@@ -32,9 +29,9 @@ class Simulator:
         self.track_history = deque(maxlen=10000)
         self.show_obstacles = True
         self.show_water_depth = True
+        self.show_minimap = True # State for toggling the minimap
 
     def reset(self):
-        """Resets the simulation to its initial state."""
         self.vessel.state = copy.deepcopy(self.initial_vessel_state)
         self.time = 0.0
         self.collision_detected = False
@@ -44,7 +41,6 @@ class Simulator:
         print("\n--- Simulation Reset ---")
 
     def step(self, dt: float, control: dict):
-        """Advances the simulation by one time step."""
         if self.collision_detected or self.is_paused:
             return
 
@@ -61,10 +57,7 @@ class Simulator:
         self.time += dt
 
     def check_collisions(self):
-        """Checks for collisions only if obstacles are toggled on."""
-        if not self.show_obstacles:
-            return
-            
+        if not self.show_obstacles: return
         vessel_pos = self.vessel.state.eta[:2]
         for obs in self.geography.obstructions:
             dist = np.linalg.norm(vessel_pos - obs.position)
