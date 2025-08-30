@@ -13,34 +13,52 @@ from vds.environment.geography import Geography
 from vds.data_handler.ais_parser import load_ais_targets
 
 def main():
-    # ... (초기 설정 부분은 이전과 동일)
+    # --- Simulation Setup ---
     geography = Geography.from_csv('data/bathymetry/sample_depth.csv', cell_size=20)
     geography.add_obstacle(center_x=500, center_y=-400, radius=50)
     geography.add_obstacle(center_x=1000, center_y=-750, radius=80)
+    
     ais_targets = load_ais_targets('data/ais/sample_ais_tracks.csv')
     print("Geography and data loaded.\n")
-    specs = VesselSpecifications(loa=232.5,beam=32.2,draft=10.8,mass=5.2e7,inertia_z=2.17e10)
-    initial_state = VesselState(nu=np.array([7.7, 0, 0, 0, 0, 0]))
+
+    specs = VesselSpecifications(
+        loa=232.5,
+        beam=32.2,
+        draft=10.8,
+        mass=5.2e7,
+        inertia_z=2.17e10
+    )
+    initial_state = VesselState(
+        nu=np.array([7.7, 0, 0, 0, 0, 0])
+    )
     vessel = BaseVessel(specs, initial_state)
+
     hydro_params_path = 'data/vessel_params/kcs_hydrodynamics.json'
     dynamics_model = MMGModel(vessel.specs, hydro_params_path)
+
     simulator = Simulator(vessel, dynamics_model, geography, ais_targets)
+
+    # --- Pygame Setup ---
     SCREEN_WIDTH = 1280
     SCREEN_HEIGHT = 720
     renderer = Renderer(SCREEN_WIDTH, SCREEN_HEIGHT)
+
+    # --- Main Loop ---
     running = True
     clock = pygame.time.Clock()
     dt = 0.1
+
     control = {'rpm': 80.0, 'rudder_angle': 0.0}
     RUDDER_INCREMENT = 1.0
     RUDDER_MAX = 35.0
     RPM_INCREMENT = 5.0
     RPM_MAX = 300.0
+    RPM_MIN = -200.0 # ADDED: Minimum RPM for reverse
+
     print("Starting simulation... Use Arrow Keys to control the vessel.")
     print("UP/DOWN: RPM | LEFT/RIGHT: Rudder | '0' KEY: Center Rudder | 'R' KEY: Reset")
 
     while running:
-        # ... (이벤트 처리 루프는 이전과 동일)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -52,7 +70,8 @@ def main():
                 elif event.key == pygame.K_UP:
                     control['rpm'] = min(RPM_MAX, control['rpm'] + RPM_INCREMENT)
                 elif event.key == pygame.K_DOWN:
-                    control['rpm'] = max(0, control['rpm'] - RPM_INCREMENT)
+                    # MODIFIED: Allow RPM to go negative down to RPM_MIN
+                    control['rpm'] = max(RPM_MIN, control['rpm'] - RPM_INCREMENT)
                 elif event.key == pygame.K_0 or event.key == pygame.K_KP0:
                     control['rudder_angle'] = 0.0
                 elif event.key == pygame.K_r:
@@ -64,15 +83,7 @@ def main():
         else:
             simulator.step(dt, control)
 
-        # 렌더러에게 항적 데이터를 전달합니다
-        renderer.render(
-            simulator.vessel, 
-            geography, 
-            control, 
-            simulator.time, 
-            simulator.ais_targets, 
-            simulator.track_history # 추가된 부분
-        )
+        renderer.render(simulator.vessel, geography, control, simulator.time, simulator.ais_targets, simulator.track_history)
 
         clock.tick(60)
 

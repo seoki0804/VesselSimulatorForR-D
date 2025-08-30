@@ -27,26 +27,31 @@ class MMGModel(BaseDynamicsModel):
         n_rps = rpm / 60.0
         rudder_angle_rad = np.radians(control.get('rudder_angle', 0))
 
-        if u < 0.1:
+        if abs(u) < 0.1 and abs(rpm) < 1.0: # Return if stationary and no thrust
             return np.zeros(6)
 
         U = np.sqrt(u**2 + v**2)
         v_prime = v / U if U > 0 else 0
         r_prime = r * self.L / U if U > 0 else 0
         
-        # Propeller calculations
+        # --- Propeller calculations (MODIFIED for Astern Thrust) ---
         w_p = self.p['w_P0']
-        J = u * (1 - w_p) / (n_rps * self.p['D_P']) if n_rps > 0 else 0
-        Kt = self.p['k_0'] + self.p['k_1'] * J + self.p['k_2'] * J**2
-        T = self.rho * (n_rps**2) * (self.p['D_P']**4) * Kt
+        
+        if n_rps >= 0: # Forward thrust
+            J = u * (1 - w_p) / (n_rps * self.p['D_P']) if n_rps > 0 else 0
+            Kt = self.p['k_0'] + self.p['k_1'] * J + self.p['k_2'] * J**2
+            T = self.rho * (n_rps**2) * (self.p['D_P']**4) * Kt
+        else: # Astern thrust (simplified model)
+            # A simple model for astern thrust, assuming lower efficiency
+            Kt_astern = -0.4 * self.p['k_0'] 
+            T = self.rho * (n_rps**2) * (self.p['D_P']**4) * Kt_astern
 
-        # --- Rudder inflow velocity calculation (UPDATED) ---
-        # This now includes the effect of the propeller race (flow acceleration from RPM)
-        beta_p = np.arctan2(v + r * self.p['x_P_prime'] * self.L, u * (1-w_p)) # Effective inflow angle at propeller
+        # Rudder inflow velocity calculation (UPDATED)
         if n_rps > 0:
-            C1 = self.p['kappa'] * (2 * Kt) / (J**2)
+            C1 = self.p['kappa'] * (2 * Kt) / (J**2) if J > 0 else self.p['kappa'] * 2 * self.p['k_0']
             u_r_factor = np.sqrt(1 + C1)
         else:
+            # No propeller race effect when going astern or stopped
             u_r_factor = 1.0
         
         u_r = self.p['epsilon'] * u * (1-w_p) * u_r_factor
