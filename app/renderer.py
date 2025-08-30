@@ -22,15 +22,26 @@ class Renderer:
         self.offset = np.array([width / 2, height / 2], dtype=float)
 
     def _world_to_screen(self, pos: np.ndarray) -> tuple[int, int]:
-        screen_pos = (pos * self.zoom) + self.offset
+        """
+        Converts world coordinates (NED: +X North, +Y East) to 
+        screen coordinates (+X Right, +Y Down) with North pointing UP.
+        """
+        # --- COORDINATE SYSTEM TRANSFORMATION ---
+        # World (x, y) -> Screen-view (y, -x)
+        transformed_pos = np.array([pos[1], -pos[0]])
+        
+        screen_pos = (transformed_pos * self.zoom) + self.offset
         return int(screen_pos[0]), int(screen_pos[1])
 
     def render(self, vessel: BaseVessel, geography: Geography, control: dict, time: float, ais_targets: list[AISTarget], track_history: deque):
         self.screen.fill((22, 44, 77))
-        self.offset = np.array([self.width / 2, self.height / 2], dtype=float) - vessel.state.eta[:2] * self.zoom
+        
+        # Adjust offset based on the transformed coordinate system
+        transformed_vessel_pos = np.array([vessel.state.eta[1], -vessel.state.eta[0]])
+        self.offset = np.array([self.width / 2, self.height / 2], dtype=float) - transformed_vessel_pos * self.zoom
 
         self._draw_geography(geography)
-        self._draw_track(track_history) # Draw vessel track
+        self._draw_track(track_history)
         self._draw_ais_targets(ais_targets)
         self._draw_vessel(vessel)
         self._draw_hud(vessel, control, time)
@@ -38,15 +49,9 @@ class Renderer:
         pygame.display.flip()
 
     def _draw_track(self, track_history: deque):
-        """Draws the vessel's track on the screen."""
         if len(track_history) < 2:
             return
-        
-        # Convert world coordinates to screen coordinates
         screen_points = [self._world_to_screen(p) for p in track_history]
-        
-        # Use 'aalines' for smoother, more stable line drawing.
-        # This is the single, correct call. The redundant 'lines' call has been removed.
         pygame.draw.aalines(self.screen, (200, 200, 255), False, screen_points, 1)
 
     def _draw_geography(self, geography: Geography):
@@ -70,7 +75,9 @@ class Renderer:
     def _draw_ais_targets(self, ais_targets: list[AISTarget]):
         for target in ais_targets:
             pos = np.array([target.state.x, target.state.y])
-            cog_rad = target.state.cog_rad
+            # Adjust angle for North-up display
+            cog_rad = target.state.cog_rad - np.pi / 2
+
             target_size = 15 * self.zoom
             if target_size < 2: continue
             points = [(target_size, 0),(-target_size / 2, -target_size / 3),(-target_size / 2, target_size / 3),]
@@ -82,7 +89,9 @@ class Renderer:
 
     def _draw_vessel(self, vessel: BaseVessel):
         pos = vessel.state.eta[:2]
-        heading_rad = vessel.state.eta[5]
+        # Adjust angle for North-up display
+        heading_rad = vessel.state.eta[5] - np.pi / 2
+
         vessel_len = vessel.specs.loa * self.zoom
         vessel_width = vessel.specs.beam * self.zoom
         points = [(vessel_len / 2, 0),(vessel_len / 4, vessel_width / 2),(-vessel_len / 2, vessel_width / 2),(-vessel_len / 2, -vessel_width / 2),(vessel_len / 4, -vessel_width / 2),]
