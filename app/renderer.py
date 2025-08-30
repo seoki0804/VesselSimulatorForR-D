@@ -6,6 +6,9 @@ from collections import deque
 from vds.models.vessels.base_vessel import BaseVessel
 from vds.environment.geography import Geography
 from vds.data_handler.ais_parser import AISTarget
+from vds.environment.wind import Wind
+from vds.environment.current import Current
+from vds.environment.waves import Waves
 
 class Renderer:
     def __init__(self, width: int, height: int):
@@ -15,26 +18,57 @@ class Renderer:
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Vessel Dynamics Simulator")
         self.font = pygame.font.Font(None, 28)
+        self.title_font = pygame.font.Font(None, 50)
         self.zoom = 0.5
         self.offset = np.array([width / 2, height / 2], dtype=float)
+
+    def draw_settings_screen(self, settings: dict, active_field: str):
+        """Draws the pre-simulation settings screen."""
+        self.screen.fill((22, 44, 77))
+        
+        # Title
+        title_surf = self.title_font.render("Environment Settings", True, (255, 255, 255))
+        self.screen.blit(title_surf, (self.width / 2 - title_surf.get_width() / 2, 100))
+
+        # Fields
+        fields = ["wind_speed", "wind_dir", "current_speed", "current_dir", "waves_h", "waves_dir"]
+        labels = ["Wind Speed (kts):", "Wind Dir (deg):", "Current Speed (kts):", "Current Dir (deg):", "Waves Hs (m):", "Waves Dir (deg):"]
+        
+        for i, (field, label) in enumerate(zip(fields, labels)):
+            # Label
+            label_surf = self.font.render(label, True, (200, 200, 200))
+            self.screen.blit(label_surf, (400, 200 + i * 40))
+
+            # Input Box
+            input_rect = pygame.Rect(600, 200 + i * 40, 140, 32)
+            
+            color = (255, 255, 0) if active_field == field else (255, 255, 255)
+            pygame.draw.rect(self.screen, color, input_rect, 2)
+            
+            text_surf = self.font.render(settings[field], True, (255, 255, 255))
+            self.screen.blit(text_surf, (input_rect.x + 5, input_rect.y + 5))
+
+        # Instructions
+        inst_surf = self.font.render("Use TAB to switch fields, ENTER to start simulation", True, (150, 150, 150))
+        self.screen.blit(inst_surf, (self.width / 2 - inst_surf.get_width() / 2, 500))
+
+        pygame.display.flip()
 
     def _world_to_screen(self, pos: np.ndarray) -> tuple[int, int]:
         transformed_pos = np.array([pos[1], -pos[0]])
         screen_pos = (transformed_pos * self.zoom) + self.offset
         return int(screen_pos[0]), int(screen_pos[1])
 
-    def render(self, vessel: BaseVessel, geography: Geography, control: dict, time: float, ais_targets: list[AISTarget], track_history: deque, show_obstacles: bool, show_water: bool):
+    def render(self, vessel: BaseVessel, geography: Geography, control: dict, time: float, ais_targets: list[AISTarget], track_history: deque, show_obstacles: bool, show_water: bool, wind: Wind, current: Current, waves: Waves):
+        # ... (rest of the file is the same as the latest version)
         self.screen.fill((22, 44, 77))
         transformed_vessel_pos = np.array([vessel.state.eta[1], -vessel.state.eta[0]])
         self.offset = np.array([self.width / 2, self.height / 2], dtype=float) - transformed_vessel_pos * self.zoom
-
-        # Pass the vessel object to _draw_geography to access draft info
         self._draw_geography(geography, show_obstacles, show_water, vessel)
         self._draw_track(track_history)
         self._draw_ais_targets(ais_targets)
         self._draw_vessel(vessel)
-        self._draw_hud(vessel, control, time, show_obstacles, show_water)
-
+        self._draw_hud(vessel, control, time, show_obstacles, show_water, wind, current, waves)
         pygame.display.flip()
 
     def _draw_track(self, track_history: deque):
@@ -49,7 +83,6 @@ class Renderer:
                 for i in range(geography.grid_height):
                     for j in range(geography.grid_width):
                         depth = geography.depth_data[i, j]
-                        # Pass vessel's draft to determine the water color
                         color = self._get_depth_color(depth, vessel.specs.draft)
                         world_pos = np.array([j * geography.cell_size, i * geography.cell_size])
                         screen_pos = self._world_to_screen(world_pos)
@@ -88,15 +121,34 @@ class Renderer:
         pygame.draw.polygon(self.screen, (255, 165, 0), screen_points)
         pygame.draw.polygon(self.screen, (255, 255, 255), screen_points, 1)
 
-    def _draw_hud(self, vessel: BaseVessel, control: dict, time: float, show_obstacles: bool, show_water: bool):
+    def _draw_hud(self, vessel: BaseVessel, control: dict, time: float, show_obstacles: bool, show_water: bool, wind: Wind, current: Current, waves: Waves):
         rudder_angle = control.get('rudder_angle', 0.0)
         if rudder_angle < -0.1: rudder_color = (255, 100, 100)
         elif rudder_angle > 0.1: rudder_color = (100, 255, 100)
         else: rudder_color = (255, 255, 255)
-        info_texts = [f"Time: {time:.1f}s",f"HDG: {vessel.heading:.1f}°",f"COG: {vessel.cog:.1f}°",f"SOG: {vessel.sog:.2f} kts",f"ROT: {vessel.rot:.1f}°/min",f"Pos: ({vessel.state.eta[0]:.1f}, {vessel.state.eta[1]:.1f}) m"]
+        
+        info_texts = [
+            f"Time: {time:.1f}s",
+            f"HDG: {vessel.heading:.1f}°",
+            f"COG: {vessel.cog:.1f}°",
+            f"SOG: {vessel.sog:.2f} kts",
+            f"ROT: {vessel.rot:.1f}°/min",
+            f"Pos: ({vessel.state.eta[0]:.1f}, {vessel.state.eta[1]:.1f}) m"
+        ]
+        
+        if wind:
+            wind_kts = wind.speed * 1.94384
+            info_texts.append(f"Wind: {wind_kts:.1f} kts @ {wind.direction}°")
+        if current:
+            current_kts = current.speed * 1.94384
+            info_texts.append(f"Current: {current_kts:.1f} kts @ {current.direction}°")
+        if waves:
+            info_texts.append(f"Waves: Hs={waves.significant_height:.1f}m @ {waves.direction}°")
+
         for i, text in enumerate(info_texts):
             surface = self.font.render(text, True, (255, 255, 255))
             self.screen.blit(surface, (10, 10 + i * 25))
+            
         control_texts = [f"RPM: {control.get('rpm', 0.0):.0f}",f"Rudder: {rudder_angle:.1f}°"]
         for i, text in enumerate(control_texts):
             color = (255, 255, 255) if i == 0 else rudder_color
@@ -111,16 +163,13 @@ class Renderer:
         self.screen.blit(water_surface, (self.width - water_surface.get_width() - 10, self.height - water_surface.get_height() - 10))
 
     def _get_depth_color(self, depth: float, vessel_draft: float):
-        """Returns a color based on water depth relative to the vessel's draft."""
         depth = abs(depth)
-        
         shallow_limit = vessel_draft * 1.2
         deep_limit = vessel_draft * 2.0
-
         if depth < shallow_limit:
-            return (217, 102, 79)  # Reddish for Shallow Water (Danger)
+            return (217, 102, 79)
         elif depth > deep_limit:
-            return (22, 85, 142)    # Dark Blue for Deep Water (Safe)
+            return (22, 85, 142)
         else:
-            return (71, 161, 201)   # Normal Blue for Transitional Water
+            return (71, 161, 201)
 

@@ -8,25 +8,28 @@ from vds.models.vessels.base_vessel import BaseVessel
 from vds.models.dynamics.base_model import BaseDynamicsModel
 from vds.environment.geography import Geography
 from vds.data_handler.ais_parser import AISTarget
+from vds.environment.wind import Wind
+from vds.environment.current import Current
+from vds.environment.waves import Waves
 
 class Simulator:
-    """
-    Manages the overall simulation loop, state updates, and interactions.
-    """
-    def __init__(self, vessel: BaseVessel, dynamics_model: BaseDynamicsModel, geography: Geography, ais_targets: list[AISTarget] = []):
+    def __init__(self, vessel: BaseVessel, dynamics_model: BaseDynamicsModel, geography: Geography, ais_targets: list[AISTarget] = [], wind: Wind = None, current: Current = None, waves: Waves = None):
         self.vessel = vessel
         self.dynamics_model = dynamics_model
         self.geography = geography
         self.ais_targets = ais_targets
+        self.wind = wind
+        self.current = current
+        self.waves = waves
+        
         self.initial_vessel_state = copy.deepcopy(vessel.state)
         self.time = 0.0
         self.collision_detected = False
         self.track_history = deque(maxlen=10000)
         self.show_obstacles = True
-        self.show_water_depth = True # State for toggling water depth colors
+        self.show_water_depth = True
 
     def reset(self):
-        """Resets the simulation to its initial state."""
         self.vessel.state = copy.deepcopy(self.initial_vessel_state)
         self.time = 0.0
         self.collision_detected = False
@@ -40,7 +43,8 @@ class Simulator:
             return
 
         current_depth = self.geography.get_depth_at(self.vessel.state.eta[0], self.vessel.state.eta[1])
-        nu_dot = self.dynamics_model.calculate_forces(self.vessel.state, control, current_depth)
+        # Pass all environmental factors to the dynamics model
+        nu_dot = self.dynamics_model.calculate_forces(self.vessel.state, control, current_depth, self.wind, self.current, self.waves)
         self.vessel.state.nu += nu_dot * dt
         self.vessel.state = update_kinematics_6dof(self.vessel.state, dt)
         
@@ -52,10 +56,7 @@ class Simulator:
         self.time += dt
 
     def check_collisions(self):
-        """Checks for collisions only if obstacles are toggled on."""
-        if not self.show_obstacles:
-            return
-            
+        if not self.show_obstacles: return
         vessel_pos = self.vessel.state.eta[:2]
         for obs in self.geography.obstructions:
             dist = np.linalg.norm(vessel_pos - obs.position)
