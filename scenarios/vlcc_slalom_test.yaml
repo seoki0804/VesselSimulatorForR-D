@@ -1,0 +1,44 @@
+# VLCC Slalom Test Scenario
+scenario_name: "VLCC Slalom Test"
+
+vessel:
+  initial_state:
+    speed_kts: 12.0 # Initial speed in knots for VLCC
+    
+  # VLCC Vessel Specifications
+  specs:
+    loa: 330.0
+    beam: 60.0
+    draft: 20.8
+    mass: 3.1e8 # Mass in kg for a fully loaded VLCC
+    inertia_z: 8.5e11
+    wind_area_longitudinal: 1500.0
+    wind_area_transverse: 6000.0
+  
+  hydro_params: "data/vessel_params/vlcc_hydrodynamics.json"
+
+initial_control:
+  rpm: 70.0
+  rudder_angle: 0.0
+
+environment:
+  geography_data: "data/bathymetry/sample_depth.csv"
+  cell_size: 20
+  
+  obstacles:
+    enabled: true
+    
+  ais_targets:
+    enabled: true
+    
+  # Default environmental conditions
+  wind:
+    speed_kts: 0.0
+    direction_deg: 0
+  current:
+    speed_kts: 0.0
+    direction_deg: 0
+  waves:
+    hs_m: 0.0
+    period_s: 8.0
+    direction_deg: 0

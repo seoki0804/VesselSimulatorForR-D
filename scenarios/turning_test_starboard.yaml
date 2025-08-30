@@ -18,8 +18,8 @@ vessel:
   hydro_params: "data/vessel_params/kcs_hydrodynamics.json"
 
 initial_control:
-  rpm: 85.0
-  rudder_angle: 35.0 # Full starboard rudder
+  rpm: 100.0
+  rudder_angle: 35.0
 
 environment:
   geography_data: "data/bathymetry/sample_depth.csv"

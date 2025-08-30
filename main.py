@@ -2,6 +2,7 @@
 
 import pygame
 import sys
+import os
 import numpy as np
 from app.renderer import Renderer
 from vds.core.simulator import Simulator
@@ -10,6 +11,36 @@ from scenarios.scenario_loader import load_scenario
 from vds.environment.wind import Wind
 from vds.environment.current import Current
 from vds.environment.waves import Waves
+
+def vessel_selection_loop(renderer, clock):
+    """Loop for the initial scenario selection screen."""
+    scenario_dir = 'scenarios'
+    try:
+        scenario_files = sorted([f for f in os.listdir(scenario_dir) if f.endswith('.yaml')])
+        if not scenario_files:
+            print(f"Error: No scenario files found in '{scenario_dir}/' directory.")
+            return None
+    except FileNotFoundError:
+        print(f"Error: The '{scenario_dir}/' directory does not exist.")
+        return None
+        
+    scenario_names = [s.replace('_', ' ').replace('.yaml', '').title() for s in scenario_files]
+    selected_index = 0
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    selected_index = (selected_index - 1) % len(scenario_names)
+                elif event.key == pygame.K_DOWN:
+                    selected_index = (selected_index + 1) % len(scenario_names)
+                elif event.key == pygame.K_RETURN:
+                    return os.path.join(scenario_dir, scenario_files[selected_index])
+        
+        renderer.draw_vessel_selection_screen(scenario_names, selected_index)
+        clock.tick(30)
 
 def settings_loop(renderer, clock, default_env):
     """Loop for pre-simulation settings, with defaults from scenario."""
@@ -49,29 +80,33 @@ def settings_loop(renderer, clock, default_env):
         renderer.draw_settings_screen(settings, active_field)
         clock.tick(30)
 
-def main(scenario_path='scenarios/turning_test_starboard.yaml'):
-    # --- Load Scenario ---
-    vessel, dynamics_model, geography, ais_targets, wind, current, waves, initial_control = load_scenario(scenario_path)
-    
-    # --- Pygame & UI Setup ---
+def main():
     SCREEN_WIDTH, SCREEN_HEIGHT = 1280, 720
     renderer = Renderer(SCREEN_WIDTH, SCREEN_HEIGHT)
     clock = pygame.time.Clock()
 
-    # --- Run Settings Loop (overrides scenario defaults) ---
+    scenario_path = vessel_selection_loop(renderer, clock)
+    if scenario_path is None:
+        pygame.quit(); sys.exit()
+
+    vessel, dynamics_model, geography, ais_targets, wind, current, waves, initial_control = load_scenario(scenario_path)
+    
     default_env = {'wind': wind, 'current': current, 'waves': waves}
     env_factors = settings_loop(renderer, clock, default_env)
     if env_factors is None:
         pygame.quit(); sys.exit()
     wind, current, waves = env_factors
     
-    # --- Initialize Simulator with final settings ---
     simulator = Simulator(vessel, dynamics_model, geography, ais_targets, wind, current, waves)
-    simulator.show_obstacles = False # Default to OFF
+    
+    # Check if obstacles were enabled in the scenario file to set initial toggle state
+    with open(scenario_path, 'r') as f:
+        import yaml
+        config = yaml.safe_load(f)
+        simulator.show_obstacles = config.get('environment', {}).get('obstacles', {}).get('enabled', False)
 
     logger = DataLogger()
 
-    # --- Main Simulation Loop ---
     running = True
     dt = 0.1
     control = initial_control.copy()

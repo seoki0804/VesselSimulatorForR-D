@@ -1,0 +1,28 @@
+# Car Carrier (PCTC) Wind Effect Test
+scenario_name: "Car Carrier Wind Test"
+
+vessel:
+  initial_state:
+    speed_kts: 16.0
+  specs:
+    loa: 200.0
+    beam: 32.2
+    draft: 9.5
+    mass: 5.5e7
+    inertia_z: 2.5e10
+    wind_area_longitudinal: 1200.0 # Very large wind areas
+    wind_area_transverse: 8500.0
+  hydro_params: "data/vessel_params/car_carrier_hydrodynamics.json"
+
+initial_control:
+  rpm: 80.0
+  rudder_angle: 0.0
+
+environment:
+  geography_data: "data/bathymetry/sample_depth.csv"
+  cell_size: 20
+  obstacles: { enabled: false }
+  ais_targets: { enabled: false }
+  wind: { speed_kts: 15.0, direction_deg: 90 } # Default wind from starboard
+  current: { speed_kts: 0.0, direction_deg: 0 }
+  waves: { hs_m: 0.0, period_s: 8.0, direction_deg: 0 }

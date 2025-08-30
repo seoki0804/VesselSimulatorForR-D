@@ -23,6 +23,21 @@ class Renderer:
         self.zoom = 0.5
         self.offset = np.array([width / 2, height / 2], dtype=float)
 
+    def draw_vessel_selection_screen(self, scenarios: list, selected_index: int):
+        """Draws the initial scenario selection screen."""
+        self.screen.fill((22, 44, 77))
+        title_surf = self.title_font.render("Select Scenario", True, (255, 255, 255))
+        self.screen.blit(title_surf, (self.width / 2 - title_surf.get_width() / 2, 100))
+
+        for i, scenario_name in enumerate(scenarios):
+            color = (255, 255, 0) if i == selected_index else (200, 200, 200)
+            text_surf = self.font.render(scenario_name, True, color)
+            self.screen.blit(text_surf, (self.width / 2 - text_surf.get_width() / 2, 200 + i * 40))
+
+        inst_surf = self.font.render("Use UP/DOWN arrows to select, ENTER to continue", True, (150, 150, 150))
+        self.screen.blit(inst_surf, (self.width / 2 - inst_surf.get_width() / 2, 500))
+        pygame.display.flip()
+
     def draw_settings_screen(self, settings: dict, active_field: str):
         """Draws the pre-simulation settings screen."""
         self.screen.fill((22, 44, 77))
@@ -55,7 +70,6 @@ class Renderer:
         return int(screen_pos[0]), int(screen_pos[1])
 
     def render(self, vessel: BaseVessel, geography: Geography, control: dict, time: float, ais_targets: list[AISTarget], track_history: deque, show_obstacles: bool, show_water: bool, wind: Wind, current: Current, waves: Waves, is_paused: bool):
-        """Main rendering function, now accepts all state variables directly."""
         self.screen.fill((22, 44, 77))
         
         transformed_vessel_pos = np.array([vessel.state.eta[1], -vessel.state.eta[0]])
@@ -142,9 +156,9 @@ class Renderer:
             f"SOG: {vessel.sog:.2f} kts", f"ROT: {vessel.rot:.1f}°/min", f"Pos: ({vessel.state.eta[0]:.1f}, {vessel.state.eta[1]:.1f}) m"
         ]
         
-        if wind: info_texts.append(f"Wind: {wind.speed:.1f} kts @ {wind.direction}°")
-        if current: info_texts.append(f"Current: {current.speed:.1f} kts @ {current.direction}°")
-        if waves: info_texts.append(f"Waves: Hs={waves.significant_height:.1f}m @ {waves.direction}°")
+        if wind and wind.speed > 0: info_texts.append(f"Wind: {wind.speed:.1f} kts @ {wind.direction}°")
+        if current and current.speed > 0: info_texts.append(f"Current: {current.speed:.1f} kts @ {current.direction}°")
+        if waves and waves.significant_height > 0: info_texts.append(f"Waves: Hs={waves.significant_height:.1f}m @ {waves.direction}°")
 
         for i, text in enumerate(info_texts):
             surface = self.font.render(text, True, (255, 255, 255))

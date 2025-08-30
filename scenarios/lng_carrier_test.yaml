@@ -1,0 +1,28 @@
+# LNG Carrier Basic Maneuvering Test
+scenario_name: "LNG Carrier Maneuvering"
+
+vessel:
+  initial_state:
+    speed_kts: 18.0
+  specs:
+    loa: 290.0
+    beam: 49.0
+    draft: 12.5
+    mass: 1.2e8
+    inertia_z: 4.0e11
+    wind_area_longitudinal: 1800.0
+    wind_area_transverse: 7000.0
+  hydro_params: "data/vessel_params/lng_carrier_hydrodynamics.json"
+
+initial_control:
+  rpm: 90.0
+  rudder_angle: 0.0
+
+environment:
+  geography_data: "data/bathymetry/sample_depth.csv"
+  cell_size: 20
+  obstacles: { enabled: false }
+  ais_targets: { enabled: false }
+  wind: { speed_kts: 0.0, direction_deg: 0 }
+  current: { speed_kts: 0.0, direction_deg: 0 }
+  waves: { hs_m: 0.0, period_s: 8.0, direction_deg: 0 }
