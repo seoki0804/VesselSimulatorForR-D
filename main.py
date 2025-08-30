@@ -111,13 +111,35 @@ def main():
     control = initial_control.copy()
     RUDDER_INCREMENT, RUDDER_MAX = 1.0, 35.0
     RPM_INCREMENT, RPM_MAX, RPM_MIN = 5.0, 300.0, -200.0
-    print("Controls: '0': Center Rudder | 'R': Reset | 'O': Obstacles | 'W': Water Depth | 'P': Pause")
+    
+    camera_locked = True
+    panning = False
+    pan_start_pos = (0, 0)
+
+    print("Controls: '0': Reset Rudder | 'R': Reset Sim | 'O': Obstacles | 'W': Water | 'P': Pause | 'C': Lock/Unlock Camera")
 
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT: running = False
+            elif event.type == pygame.MOUSEWHEEL:
+                camera_locked = False
+                mouse_pos = pygame.mouse.get_pos()
+                world_pos_before = (mouse_pos - renderer.offset) / renderer.zoom
+                if event.y > 0: renderer.zoom *= 1.1
+                else: renderer.zoom /= 1.1
+                renderer.zoom = np.clip(renderer.zoom, 0.05, 5.0)
+                renderer.offset = mouse_pos - world_pos_before * renderer.zoom
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    panning, camera_locked = True, False
+                    pan_start_pos = pygame.mouse.get_pos()
+                    pan_start_offset = renderer.offset.copy()
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:
+                    panning = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT: control['rudder_angle'] = max(-RUDDER_MAX, control['rudder_angle'] - RUDDER_INCREMENT)
+                if event.key == pygame.K_c: camera_locked = not camera_locked
+                elif event.key == pygame.K_LEFT: control['rudder_angle'] = max(-RUDDER_MAX, control['rudder_angle'] - RUDDER_INCREMENT)
                 elif event.key == pygame.K_RIGHT: control['rudder_angle'] = min(RUDDER_MAX, control['rudder_angle'] + RUDDER_INCREMENT)
                 elif event.key == pygame.K_UP: control['rpm'] = min(RPM_MAX, control['rpm'] + RPM_INCREMENT)
                 elif event.key == pygame.K_DOWN: control['rpm'] = max(RPM_MIN, control['rpm'] - RPM_INCREMENT)
@@ -126,6 +148,12 @@ def main():
                 elif event.key == pygame.K_o: simulator.show_obstacles = not simulator.show_obstacles
                 elif event.key == pygame.K_w: simulator.show_water_depth = not simulator.show_water_depth
                 elif event.key == pygame.K_p: simulator.is_paused = not simulator.is_paused
+
+        if panning:
+            mouse_delta = np.array(pygame.mouse.get_pos()) - np.array(pan_start_pos)
+            renderer.offset = pan_start_offset + mouse_delta
+        elif camera_locked:
+            renderer.recenter(simulator.vessel.state.eta[:2])
 
         if not simulator.collision_detected:
             if not simulator.is_paused:
@@ -137,8 +165,7 @@ def main():
             simulator.ais_targets, simulator.track_history,
             simulator.show_obstacles, simulator.show_water_depth,
             simulator.wind, simulator.current, simulator.waves,
-            simulator.is_paused,
-            waypoints
+            simulator.is_paused, waypoints
         )
         clock.tick(60)
         
