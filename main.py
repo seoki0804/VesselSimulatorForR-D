@@ -9,12 +9,16 @@ from vds.core.simulator import Simulator
 from vds.models.vessels.base_vessel import BaseVessel, VesselSpecifications, VesselState
 from vds.models.dynamics.simple_3dof_model import Simple3DOFModel
 from vds.environment.geography import Geography
+from vds.data_handler.ais_parser import load_ais_targets # Import AIS loader
 
 def main():
     # --- Simulation Setup ---
     geography = Geography.from_csv('data/bathymetry/sample_depth.csv', cell_size=20)
     geography.add_obstacle(center_x=150, center_y=-100, radius=25)
     geography.add_obstacle(center_x=300, center_y=-250, radius=40)
+    
+    # Load AIS targets
+    ais_targets = load_ais_targets('data/ais/sample_ais_tracks.csv')
     print("Geography and obstacle data loaded.\n")
 
     specs = VesselSpecifications(
@@ -33,7 +37,8 @@ def main():
     Iz = specs.inertia_z + 2.0e9
     dynamics_model = Simple3DOFModel(vessel_mass=mass, inertia_z=Iz, vessel_draft=specs.draft)
 
-    simulator = Simulator(vessel, dynamics_model, geography)
+    # Pass AIS targets to the simulator
+    simulator = Simulator(vessel, dynamics_model, geography, ais_targets)
 
     # --- Pygame Setup ---
     SCREEN_WIDTH = 1280
@@ -69,7 +74,7 @@ def main():
                     control['rpm'] = max(0, control['rpm'] - RPM_INCREMENT)
                 elif event.key == pygame.K_0 or event.key == pygame.K_KP0:
                     control['rudder_angle'] = 0.0
-                elif event.key == pygame.K_r: # ADDED: Reset functionality
+                elif event.key == pygame.K_r:
                     simulator.reset()
                     control = {'rpm': 100.0, 'rudder_angle': 0.0}
 
@@ -78,7 +83,8 @@ def main():
         else:
             simulator.step(dt, control)
 
-        renderer.render(simulator.vessel, geography, control, simulator.time)
+        # Pass AIS targets to the renderer
+        renderer.render(simulator.vessel, geography, control, simulator.time, simulator.ais_targets)
 
         clock.tick(60)
 

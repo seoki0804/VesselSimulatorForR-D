@@ -6,24 +6,18 @@ from .kinematics import update_kinematics_6dof
 from vds.models.vessels.base_vessel import BaseVessel
 from vds.models.dynamics.base_model import BaseDynamicsModel
 from vds.environment.geography import Geography
+from vds.data_handler.ais_parser import AISTarget # Import AISTarget
 
 class Simulator:
     """
     Manages the overall simulation loop, state updates, and interactions.
     """
-    def __init__(self, vessel: BaseVessel, dynamics_model: BaseDynamicsModel, geography: Geography):
-        """
-        Initializes the simulator.
-
-        Args:
-            vessel (BaseVessel): The vessel object to be simulated.
-            dynamics_model (BaseDynamicsModel): The physics model for the vessel.
-            geography (Geography): The environment data.
-        """
+    def __init__(self, vessel: BaseVessel, dynamics_model: BaseDynamicsModel, geography: Geography, ais_targets: list[AISTarget] = []):
         self.vessel = vessel
         self.dynamics_model = dynamics_model
         self.geography = geography
-        # Store the initial state for resetting
+        self.ais_targets = ais_targets # Store AIS targets
+
         self.initial_vessel_state = copy.deepcopy(vessel.state)
         self.time = 0.0
         self.collision_detected = False
@@ -33,43 +27,34 @@ class Simulator:
         self.vessel.state = copy.deepcopy(self.initial_vessel_state)
         self.time = 0.0
         self.collision_detected = False
+        # Reset AIS targets to their initial positions
+        for target in self.ais_targets:
+            target.update(0)
         print("\n--- Simulation Reset ---")
 
     def step(self, dt: float, control: dict):
-        """
-        Advances the simulation by one time step.
-
-        Args:
-            dt (float): The time step duration in seconds.
-            control (dict): A dictionary containing control inputs (e.g., {'rpm': ..., 'rudder_angle': ...}).
-        """
         if self.collision_detected:
             return
 
-        # 1. Get current depth at vessel position
+        # --- Update Own Ship ---
         current_depth = self.geography.get_depth_at(self.vessel.state.eta[0], self.vessel.state.eta[1])
-
-        # 2. Calculate forces (nu_dot) from the dynamics model
         nu_dot = self.dynamics_model.calculate_forces(self.vessel.state, control, current_depth)
-        
-        # 3. Integrate velocities (nu) over the time step
         self.vessel.state.nu += nu_dot * dt
-        
-        # 4. Update vessel state (position and orientation) using kinematics
         self.vessel.state = update_kinematics_6dof(self.vessel.state, dt)
-
-        # 5. Check for collisions with obstructions
         self.check_collisions()
+        
+        # --- Update AIS Targets ---
+        for target in self.ais_targets:
+            target.update(self.time)
 
-        # 6. Update simulation time
         self.time += dt
 
     def check_collisions(self):
         """Checks for collisions between the vessel and any obstructions."""
-        vessel_pos = self.vessel.state.eta[:2] # Get (x, y) position
+        vessel_pos = self.vessel.state.eta[:2]
         for obs in self.geography.obstructions:
             dist = np.linalg.norm(vessel_pos - obs.position)
-            if dist < (self.vessel.specs.loa / 2 + obs.radius): # Simple circle collision
+            if dist < (self.vessel.specs.loa / 2 + obs.radius):
                 self.collision_detected = True
                 print(f"COLLISION DETECTED with obstruction at {obs.position}!")
                 break
