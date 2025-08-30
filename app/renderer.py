@@ -64,11 +64,13 @@ class Renderer:
         return int(screen_pos[0]), int(screen_pos[1])
 
     def render(self, simulator, control: dict):
+        """Main rendering function. Now takes the simulator object directly."""
         self.screen.fill((22, 44, 77))
         vessel = simulator.vessel
 
         self._draw_geography(simulator.geography, simulator.show_obstacles, simulator.show_water_depth, vessel)
-        self._draw_waypoints(getattr(simulator, 'waypoints', []))
+        # FIXED: Pass the current waypoint index from the simulator
+        self._draw_waypoints(getattr(simulator, 'waypoints', []), simulator.current_waypoint_index)
         self._draw_track(simulator.track_history)
         self._draw_ais_targets(simulator.ais_targets)
         self._draw_vessel(vessel)
@@ -139,23 +141,19 @@ class Renderer:
             surface = self.font.render(text, True, (255, 255, 255))
             self.screen.blit(surface, (10, 10 + i * 25))
             
-        # FIXED: Moved control status to the bottom-center
         rpm_text = f"RPM: {control.get('rpm', 0.0):.0f}"
         rudder_text = f"Rudder: {rudder_angle:.1f}°"
-        
         rpm_surf = self.font.render(rpm_text, True, (255, 255, 255))
         rudder_surf = self.font.render(rudder_text, True, rudder_color)
-        
         padding = 40
         total_width = rpm_surf.get_width() + padding + rudder_surf.get_width()
         start_x = self.width / 2 - total_width / 2
-        
         y_pos = self.height - rpm_surf.get_height() - 10
-        
         self.screen.blit(rpm_surf, (start_x, y_pos))
         self.screen.blit(rudder_surf, (start_x + rpm_surf.get_width() + padding, y_pos))
         
         toggle_texts = [
+            f"[A] Autopilot: {'ON' if simulator.autopilot_enabled else 'OFF'}",
             f"[M] Minimap: {'ON' if simulator.show_minimap else 'OFF'}",
             f"[O] Obstacles: {'ON' if simulator.show_obstacles else 'OFF'}",
             f"[W] Water Depth: {'ON' if simulator.show_water_depth else 'OFF'}"
@@ -165,13 +163,14 @@ class Renderer:
             y_pos = self.height - (len(toggle_texts) - i) * 30
             self.screen.blit(surface, (10, y_pos))
 
-    def _draw_waypoints(self, waypoints: list):
-        for wp in waypoints:
+    def _draw_waypoints(self, waypoints: list, current_index: int):
+        for i, wp in enumerate(waypoints):
             pos = np.array(wp['position'])
             name = wp['name']
             screen_pos = self._world_to_screen(pos)
-            pygame.draw.circle(self.screen, (255, 0, 255), screen_pos, 10, 2)
-            text_surf = self.font.render(name, True, (255, 0, 255))
+            color = (0, 255, 0) if i == current_index else (255, 0, 255)
+            pygame.draw.circle(self.screen, color, screen_pos, 12, 2)
+            text_surf = self.font.render(name, True, color)
             self.screen.blit(text_surf, (screen_pos[0] + 15, screen_pos[1] - 10))
 
     def _draw_pause_overlay(self):

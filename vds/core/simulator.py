@@ -1,3 +1,4 @@
+
 # vds/core/simulator.py
 
 import numpy as np
@@ -21,21 +22,25 @@ class Simulator:
         self.wind = wind
         self.current = current
         self.waves = waves
+        self.waypoints = [] # Waypoints for autopilot
+        self.current_waypoint_index = 0
         
         self.initial_vessel_state = copy.deepcopy(vessel.state)
         self.time = 0.0
         self.collision_detected = False
         self.is_paused = False
+        self.autopilot_enabled = False # Autopilot state
         self.track_history = deque(maxlen=10000)
         self.show_obstacles = True
         self.show_water_depth = True
-        self.show_minimap = True # State for toggling the minimap
+        self.show_minimap = True
 
     def reset(self):
         self.vessel.state = copy.deepcopy(self.initial_vessel_state)
         self.time = 0.0
         self.collision_detected = False
         self.track_history.clear()
+        self.current_waypoint_index = 0
         for target in self.ais_targets:
             target.update(0)
         print("\n--- Simulation Reset ---")
@@ -43,6 +48,8 @@ class Simulator:
     def step(self, dt: float, control: dict):
         if self.collision_detected or self.is_paused:
             return
+
+        self._update_waypoint_tracking()
 
         current_depth = self.geography.get_depth_at(self.vessel.state.eta[0], self.vessel.state.eta[1])
         nu_dot = self.dynamics_model.calculate_forces(self.vessel.state, control, current_depth, self.wind, self.current, self.waves)
@@ -55,6 +62,24 @@ class Simulator:
         for target in self.ais_targets:
             target.update(self.time)
         self.time += dt
+
+    def _update_waypoint_tracking(self):
+        """Checks if the vessel has reached the current waypoint and advances to the next."""
+        if not self.waypoints or self.current_waypoint_index >= len(self.waypoints):
+            return
+
+        target_pos = np.array(self.waypoints[self.current_waypoint_index]['position'])
+        current_pos = self.vessel.state.eta[:2]
+        
+        distance_to_target = np.linalg.norm(target_pos - current_pos)
+        
+        # Waypoint arrival check (e.g., within 2 ship lengths)
+        if distance_to_target < self.vessel.specs.loa * 2:
+            print(f"Waypoint '{self.waypoints[self.current_waypoint_index]['name']}' reached!")
+            self.current_waypoint_index += 1
+            if self.current_waypoint_index >= len(self.waypoints):
+                print("All waypoints reached. Autopilot disengaging.")
+                self.autopilot_enabled = False
 
     def check_collisions(self):
         if not self.show_obstacles: return

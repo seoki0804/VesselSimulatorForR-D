@@ -12,6 +12,7 @@ from scenarios.scenario_loader import load_scenario
 from vds.environment.wind import Wind
 from vds.environment.current import Current
 from vds.environment.waves import Waves
+from vds.core.autopilot import Autopilot
 
 def vessel_selection_loop(renderer, clock):
     """Loop for the initial scenario selection screen."""
@@ -99,13 +100,14 @@ def main():
     wind, current, waves = env_factors
     
     simulator = Simulator(vessel, dynamics_model, geography, ais_targets, wind, current, waves)
-    simulator.waypoints = waypoints # Attach waypoints to simulator for access
+    simulator.waypoints = waypoints
     
     with open(scenario_path, 'r') as f:
         config = yaml.safe_load(f)
         simulator.show_obstacles = config.get('environment', {}).get('obstacles', {}).get('enabled', False)
 
     logger = DataLogger()
+    autopilot = Autopilot()
 
     running = True
     dt = 0.1
@@ -117,7 +119,7 @@ def main():
     panning = False
     pan_start_pos = (0, 0)
 
-    print("Controls: '0': Center Rudder | 'R': Reset Sim | 'O': Obstacles | 'W': Water | 'P': Pause | 'C': Lock/Unlock Camera | 'M': Minimap")
+    print("Controls: '0': Center Rudder | 'R': Reset | 'O': Obstacles | 'W': Water | 'P': Pause | 'C': Camera Lock | 'M': Minimap | 'A': Autopilot")
 
     while running:
         for event in pygame.event.get():
@@ -140,12 +142,16 @@ def main():
                     panning = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_c: camera_locked = not camera_locked
+                elif event.key == pygame.K_a:
+                    simulator.autopilot_enabled = not simulator.autopilot_enabled
+                    autopilot.reset()
+                    print(f"Autopilot {'ENGAGED' if simulator.autopilot_enabled else 'DISENGAGED'}.")
                 elif event.key == pygame.K_LEFT: control['rudder_angle'] = max(-RUDDER_MAX, control['rudder_angle'] - RUDDER_INCREMENT)
                 elif event.key == pygame.K_RIGHT: control['rudder_angle'] = min(RUDDER_MAX, control['rudder_angle'] + RUDDER_INCREMENT)
                 elif event.key == pygame.K_UP: control['rpm'] = min(RPM_MAX, control['rpm'] + RPM_INCREMENT)
                 elif event.key == pygame.K_DOWN: control['rpm'] = max(RPM_MIN, control['rpm'] - RPM_INCREMENT)
                 elif event.key == pygame.K_0 or event.key == pygame.K_KP0: control['rudder_angle'] = 0.0
-                elif event.key == pygame.K_r: simulator.reset(); control = initial_control.copy()
+                elif event.key == pygame.K_r: simulator.reset(); control = initial_control.copy(); autopilot.reset()
                 elif event.key == pygame.K_o: simulator.show_obstacles = not simulator.show_obstacles
                 elif event.key == pygame.K_w: simulator.show_water_depth = not simulator.show_water_depth
                 elif event.key == pygame.K_p: simulator.is_paused = not simulator.is_paused
@@ -157,12 +163,16 @@ def main():
         elif camera_locked:
             renderer.recenter(simulator.vessel.state.eta[:2])
 
+        if simulator.autopilot_enabled and simulator.current_waypoint_index < len(simulator.waypoints):
+            target_pos = np.array(simulator.waypoints[simulator.current_waypoint_index]['position'])
+            control['rudder_angle'] = autopilot.calculate_rudder_angle(
+                simulator.vessel.state.eta[:2], simulator.vessel.state.eta[5], target_pos, dt)
+
         if not simulator.collision_detected:
             if not simulator.is_paused:
                 logger.log(simulator, control)
             simulator.step(dt, control)
 
-        # MODIFIED: Simplified render call
         renderer.render(simulator, control)
         
         clock.tick(60)
