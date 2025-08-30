@@ -14,6 +14,7 @@ from vds.data_handler.ais_parser import load_ais_targets
 from vds.environment.wind import Wind
 from vds.environment.current import Current
 from vds.environment.waves import Waves
+from vds.utils.logger import DataLogger
 
 def settings_loop(renderer, clock):
     """Loop for the pre-simulation settings screen."""
@@ -29,10 +30,9 @@ def settings_loop(renderer, clock):
         active_field = fields[active_field_index]
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return None # Exit application
+                return None
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
-                    # Parse settings and start simulation
                     try:
                         wind = Wind(speed=float(settings["wind_speed"]), direction=float(settings["wind_dir"]))
                         current = Current(speed=float(settings["current_speed"]), direction=float(settings["current_dir"]))
@@ -40,13 +40,15 @@ def settings_loop(renderer, clock):
                         return wind, current, waves
                     except ValueError:
                         print("Invalid number in settings. Please check.")
-                        continue # Stay in settings loop
+                        continue
                 elif event.key == pygame.K_TAB:
                     active_field_index = (active_field_index + 1) % len(fields)
                 elif event.key == pygame.K_BACKSPACE:
                     settings[active_field] = settings[active_field][:-1]
                 else:
-                    settings[active_field] += event.unicode
+                    # Allow only numbers and a single dot for floats
+                    if event.unicode.isdigit() or (event.unicode == '.' and '.' not in settings[active_field]):
+                        settings[active_field] += event.unicode
 
         renderer.draw_settings_screen(settings, active_field)
         clock.tick(30)
@@ -56,14 +58,12 @@ def main():
     renderer = Renderer(SCREEN_WIDTH, SCREEN_HEIGHT)
     clock = pygame.time.Clock()
 
-    # --- Run Settings Loop First ---
     env_factors = settings_loop(renderer, clock)
     if env_factors is None:
         pygame.quit()
         sys.exit()
     wind, current, waves = env_factors
 
-    # --- Simulation Setup ---
     geography = Geography.from_csv('data/bathymetry/sample_depth.csv', cell_size=20)
     geography.add_random_obstacles(count=5, min_radius=15, max_radius=30, safe_zone_radius=200.0)
     ais_targets = load_ais_targets('data/ais/sample_ais_tracks.csv')
@@ -79,18 +79,22 @@ def main():
     hydro_params_path = 'data/vessel_params/kcs_hydrodynamics.json'
     dynamics_model = MMGModel(vessel.specs, hydro_params_path)
     simulator = Simulator(vessel, dynamics_model, geography, ais_targets, wind, current, waves)
-    simulator.show_obstacles = False # Set initial state of obstacles to OFF
+    simulator.show_obstacles = False
 
-    # --- Main Simulation Loop ---
+    logger = DataLogger()
+
     running = True
     dt = 0.1
     control = {'rpm': 80.0, 'rudder_angle': 0.0}
     RUDDER_INCREMENT, RUDDER_MAX = 1.0, 35.0
     RPM_INCREMENT, RPM_MAX, RPM_MIN = 5.0, 300.0, -200.0
 
+    print("Controls: '0': Center Rudder | 'R': Reset | 'O': Obstacles | 'W': Water Depth | 'P': Pause")
+
     while running:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT: running = False
+            if event.type == pygame.QUIT:
+                running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_LEFT: control['rudder_angle'] = max(-RUDDER_MAX, control['rudder_angle'] - RUDDER_INCREMENT)
                 elif event.key == pygame.K_RIGHT: control['rudder_angle'] = min(RUDDER_MAX, control['rudder_angle'] + RUDDER_INCREMENT)
@@ -100,17 +104,23 @@ def main():
                 elif event.key == pygame.K_r: simulator.reset(); control = {'rpm': 80.0, 'rudder_angle': 0.0}
                 elif event.key == pygame.K_o: simulator.show_obstacles = not simulator.show_obstacles
                 elif event.key == pygame.K_w: simulator.show_water_depth = not simulator.show_water_depth
+                elif event.key == pygame.K_p: simulator.is_paused = not simulator.is_paused
 
         if not simulator.collision_detected:
+            if not simulator.is_paused:
+                logger.log(simulator, control)
             simulator.step(dt, control)
 
         renderer.render(
             simulator.vessel, geography, control, simulator.time, 
             simulator.ais_targets, simulator.track_history,
             simulator.show_obstacles, simulator.show_water_depth,
-            simulator.wind, simulator.current, simulator.waves
+            simulator.wind, simulator.current, simulator.waves,
+            simulator.is_paused
         )
         clock.tick(60)
+        
+    logger.save()
     pygame.quit()
     sys.exit()
 
